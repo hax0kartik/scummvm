@@ -495,6 +495,12 @@ public:
 	              TextInversionState inverted = kTextInversionNone, int deltax = 0, bool useEllipsis = true,
 	              FontStyle font = kFontStyleBold, FontColor color = kFontColorNormal, bool restore = true,
 	              const Common::Rect &drawableTextArea = Common::Rect(0, 0, 0, 0));
+	
+	void drawText(const Common::Rect &r, const Common::Rect &invertr, const Common::U32String &str, WidgetStateInfo state = kStateEnabled,
+	              Graphics::TextAlign align = Graphics::kTextAlignCenter,
+	              TextInversionState inverted = kTextInversionNone, int deltax = 0, bool useEllipsis = true,
+	              FontStyle font = kFontStyleBold, FontColor color = kFontColorNormal, bool restore = true,
+	              const Common::Rect &drawableTextArea = Common::Rect(0, 0, 0, 0));
 
 	void drawChar(const Common::Rect &r, byte ch, const Graphics::Font *font, FontColor color = kFontColorNormal);
 

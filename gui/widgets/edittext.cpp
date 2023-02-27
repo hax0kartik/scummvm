@@ -20,6 +20,7 @@
  */
 
 #include "common/system.h"
+#include "common/unicode-bidi.h"
 #include "gui/widgets/edittext.h"
 #include "gui/gui-manager.h"
 
@@ -46,6 +47,7 @@ EditTextWidget::EditTextWidget(GuiObject *boss, const Common::String &name, cons
 	_finishCmd = finishCmd;
 
 	_leftPadding = _rightPadding = 0;
+	_shiftPressed = _isDragging = false;
 
 	setEditString(text);
 	setFontStyle(font);
@@ -63,38 +65,6 @@ void EditTextWidget::reflowLayout() {
 	EditableWidget::reflowLayout();
 }
 
-void EditTextWidget::handleMouseDown(int x, int y, int button, int clickCount) {
-	if (!isEnabled())
-		return;
-
-	// First remove caret
-	if (_caretVisible)
-		drawCaret(true);
-
-	if (g_gui.useRTL()) {
-		x = _w - x;
-	}
-
-	x += _editScrollOffset;
-	int width = 0;
-	if (_drawAlign == Graphics::kTextAlignRight)
-		width = _editScrollOffset + getEditRect().width() - g_gui.getStringWidth(_editString, _font);
-
-	uint i;
-
-	uint last = 0;
-	for (i = 0; i < _editString.size(); ++i) {
-		const uint cur = _editString[i];
-		width += g_gui.getCharWidth(cur, _font) + g_gui.getKerningOffset(last, cur, _font);
-		if (width >= x && width > _editScrollOffset + _leftPadding)
-			break;
-		last = cur;
-	}
-
-	setCaretPos(i);
-	markAsDirty();
-}
-
 void EditTextWidget::drawWidget() {
 	g_gui.theme()->drawWidgetBackground(Common::Rect(_x, _y, _x + _w, _y + _h),
 	                                    ThemeEngine::kWidgetBackgroundEditText);
@@ -105,10 +75,48 @@ void EditTextWidget::drawWidget() {
 	drawRect.translate(_x, _y);
 	setTextDrawableArea(drawRect);
 
-	g_gui.theme()->drawText(
-			drawRect,
-			_editString, _state, _drawAlign, ThemeEngine::kTextInversionNone,
-			-_editScrollOffset, false, _font, ThemeEngine::kFontColorNormal, true, _textDrawableArea);
+	int x = drawRect.left;
+	int y = drawRect.top;
+
+	if (_align == Graphics::kTextAlignRight) {
+		int strVisibleWidth = g_gui.getStringWidth(_editString, _font) - _editScrollOffset;
+		if (strVisibleWidth > drawRect.width()) {
+			_drawAlign = Graphics::kTextAlignLeft;
+			strVisibleWidth = drawRect.width();
+		} else {
+			_drawAlign = _align;
+		}
+		x = drawRect.right - strVisibleWidth;
+	}
+
+	int selBegin = _selCaretPos;
+	int selEnd = _selOffset + _selCaretPos;
+	if (selBegin > selEnd)
+		SWAP(selBegin, selEnd);
+	
+	if (_selOffset != 0) {
+		Common::UnicodeBiDiText utxt(_editString);
+		Common::U32String selectedString = Common::U32String(utxt.visual.c_str() + selBegin, selEnd - selBegin);
+		int selBeginX = x + MIN(getSelectionCarretOffset(), getCaretOffset());
+		int selEndX = selBeginX;
+
+		for (uint i = 0, last = 0; i < selectedString.size(); ++i) {
+			const uint cur = selectedString[i];
+			selEndX += g_gui.getCharWidth(cur, _font) + g_gui.getKerningOffset(last, cur, _font);
+			last = cur;
+		}
+
+		selBeginX = MAX(selBeginX, (int)drawRect.left);
+		selEndX = MIN(selEndX, (int)drawRect.right);
+
+		g_gui.theme()->drawText(drawRect, Common::Rect(selBeginX, y, selEndX, y + drawRect.height()), _editString, 
+			                _state, _drawAlign, ThemeEngine::kTextInversionFocus, -_editScrollOffset , false, _font,
+			                ThemeEngine::kFontColorNormal, true, _textDrawableArea);
+	} else {
+		g_gui.theme()->drawText(drawRect, _editString, _state, _drawAlign, 
+			                ThemeEngine::kTextInversionNone, -_editScrollOffset , false, _font,
+			                ThemeEngine::kFontColorNormal, true, _textDrawableArea);
+	}
 }
 
 Common::Rect EditTextWidget::getEditRect() const {
@@ -133,9 +141,10 @@ void EditTextWidget::receivedFocusWidget() {
 }
 
 void EditTextWidget::lostFocusWidget() {
-	// If we lose focus, 'commit' the user changes
+	// If we lose focus, 'commit' the user changes and clear selection
 	_backupString = _editString;
 	drawCaret(true);
+	clearSelection();
 
 	g_system->setFeatureState(OSystem::kFeatureVirtualKeyboard, false);
 }

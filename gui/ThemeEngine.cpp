@@ -1350,9 +1350,10 @@ void ThemeEngine::drawTab(const Common::Rect &r, int tabHeight, const Common::Ar
 	}
 }
 
-void ThemeEngine::drawText(const Common::Rect &r, const Common::U32String &str, WidgetStateInfo state,
-						   Graphics::TextAlign align, TextInversionState inverted, int deltax, bool useEllipsis,
-						   FontStyle font, FontColor color, bool restore, const Common::Rect &drawableTextArea) {
+void ThemeEngine::drawText(const Common::Rect &r, const Common::Rect &invertRect, const Common::U32String &str,
+						   WidgetStateInfo state, Graphics::TextAlign align, TextInversionState inverted, int deltax,
+						   bool useEllipsis, FontStyle font, FontColor color, bool restore, 
+						   const Common::Rect &drawableTextArea) {
 	if (!ready())
 		return;
 
@@ -1439,12 +1440,12 @@ void ThemeEngine::drawText(const Common::Rect &r, const Common::U32String &str, 
 
 	switch (inverted) {
 	case kTextInversion:
-		drawDD(kDDTextSelectionBackground, r);
+		drawDD(kDDTextSelectionBackground, invertRect);
 		restore = false;
 		break;
 
 	case kTextInversionFocus:
-		drawDD(kDDTextSelectionFocusBackground, r);
+		drawDD(kDDTextSelectionFocusBackground, invertRect);
 		restore = false;
 		break;
 
@@ -1454,6 +1455,13 @@ void ThemeEngine::drawText(const Common::Rect &r, const Common::U32String &str, 
 
 	drawDDText(textId, colorId, r, str, restore, useEllipsis, align, kTextAlignVCenter, deltax, drawableTextArea);
 }
+
+void ThemeEngine::drawText(const Common::Rect &r, const Common::U32String &str, WidgetStateInfo state,
+						   Graphics::TextAlign align, TextInversionState inverted, int deltax, bool useEllipsis,
+						   FontStyle font, FontColor color, bool restore, const Common::Rect &drawableTextArea) {
+	drawText(r, r, str, state, align, inverted, deltax, useEllipsis, font, color, restore, drawableTextArea);
+}
+
 
 void ThemeEngine::drawChar(const Common::Rect &r, byte ch, const Graphics::Font *font, FontColor color) {
 	if (!ready())

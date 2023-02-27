@@ -30,11 +30,13 @@ namespace GUI {
 
 EditableWidget::EditableWidget(GuiObject *boss, int x, int y, int w, int h, const Common::U32String &tooltip, uint32 cmd)
 	: Widget(boss, x, y, w, h, tooltip), CommandSender(boss), _cmd(cmd) {
+	setFlags(WIDGET_TRACK_MOUSE);
 	init();
 }
 
 EditableWidget::EditableWidget(GuiObject *boss, const Common::String &name, const Common::U32String &tooltip, uint32 cmd)
 	: Widget(boss, name, tooltip), CommandSender(boss), _cmd(cmd) {
+	setFlags(WIDGET_TRACK_MOUSE);
 	init();
 }
 
@@ -46,6 +48,11 @@ void EditableWidget::init() {
 	_caretInverse = false;
 
 	_editScrollOffset = 0;
+
+	_selCaretPos = -1;
+	_selOffset = 0;
+
+	_shiftPressed = _isDragging = false;
 
 	_align = g_gui.useRTL() ? Graphics::kTextAlignRight : Graphics::kTextAlignLeft;
 	_drawAlign = _align;
@@ -104,6 +111,92 @@ void EditableWidget::handleTickle() {
 	}
 }
 
+void EditableWidget::handleMouseDown(int x, int y, int button, int clickCount) {
+	if (!isEnabled())
+		return;
+	
+	_isDragging = true;
+	// Select all text incase of double press
+	if (clickCount > 1) {
+		_selCaretPos = 0;
+		setCaretPos(caretVisualPos(_editString.size()));
+		setSelectionOffset(_editString.size() - _selCaretPos);
+		markAsDirty();
+		return;
+	}
+	
+	// Clear any selection
+	if (_selOffset != 0 && !_shiftPressed)
+		clearSelection();
+	else if (_shiftPressed && _selCaretPos < 0)
+		_selCaretPos = _caretPos;
+
+	if (g_gui.useRTL()) {
+		x = _w - x;
+	}
+
+	x += _editScrollOffset;
+	int width = 0;
+	if (_drawAlign == Graphics::kTextAlignRight)
+		width = _editScrollOffset + getEditRect().width() - g_gui.getStringWidth(_editString, _font);
+
+	uint i, last = 0;
+	for (i = 0; i < _editString.size(); ++i) {
+		const uint cur = _editString[i];
+		width += g_gui.getCharWidth(cur, _font) + g_gui.getKerningOffset(last, cur, _font);
+		if (width >= x && width > _editScrollOffset)
+			break;
+		last = cur;
+	}
+	setCaretPos(i);
+	if(_selCaretPos >= 0) setSelectionOffset(i - _selCaretPos);
+	markAsDirty();
+}
+
+void EditableWidget::handleMouseUp(int x, int y, int button, int clickCount) {
+	if(isEnabled())
+		_isDragging = false;
+}
+
+void EditableWidget::handleMouseMoved(int x, int y, int button) {
+	if(_isDragging && isEnabled()) {
+		if(_selCaretPos < 0)
+			_selCaretPos = _caretPos;
+
+		if (g_gui.useRTL()) {
+			x = _w - x;
+		}
+
+		if (x < 0 && _editScrollOffset > 0) {
+			_editScrollOffset += x;
+			if(_editScrollOffset < 0)
+				_editScrollOffset = 0;
+		}
+
+		x += _editScrollOffset;
+		int width = 0;
+		if (_drawAlign == Graphics::kTextAlignRight)
+			width = _editScrollOffset + getEditRect().width() - g_gui.getStringWidth(_editString, _font);
+		uint i, last = 0;
+		for (i = 0; i < _editString.size(); ++i) {
+			const uint cur = _editString[i];
+			width += g_gui.getCharWidth(cur, _font) + g_gui.getKerningOffset(last, cur, _font);
+			if (width >= x && width > _editScrollOffset)
+				break;
+			last = cur;
+		}
+
+		setCaretPos(i);
+		if(_selCaretPos >= 0) setSelectionOffset(i - _selCaretPos);
+		markAsDirty();
+	}
+}
+
+bool EditableWidget::handleKeyUp(Common::KeyState state) {
+	_shiftPressed = state.hasFlags(Common::KBD_SHIFT);
+	return false;
+}
+
 bool EditableWidget::handleKeyDown(Common::KeyState state) {
 	bool handled = true;
 	bool dirty = false;
@@ -116,6 +209,16 @@ bool EditableWidget::handleKeyDown(Common::KeyState state) {
 	// First remove caret
 	if (_caretVisible)
 		drawCaret(true);
+
+	_shiftPressed = state.hasFlags(Common::KBD_SHIFT);
+
+	if (_selCaretPos > 0 
+		&& !state.hasFlags(Common::KBD_SHIFT) 
+		&& !(state.hasFlags(Common::KBD_CTRL)
+		|| state.keycode == Common::KEYCODE_c)
+		&& state.keycode != Common::KEYCODE_BACKSPACE) {
+		clearSelection();
+	}
 
 	// Remap numeric keypad if NUM lock is *not* active.
 	// This code relies on the fact that the various KEYCODE_KP* values are
@@ -154,10 +257,22 @@ bool EditableWidget::handleKeyDown(Common::KeyState state) {
 
 	case Common::KEYCODE_BACKSPACE:
 		deleteIndex = caretLogicalPos();
-		if (deleteIndex > 0) {
+		if (deleteIndex > 0 && _selOffset == 0) {
 			deleteIndex--;
 			_editString.deleteChar(deleteIndex);
 			setCaretPos(caretVisualPos(deleteIndex));
+			dirty = true;
+
+			sendCommand(_cmd, 0);
+		} else if (deleteIndex >= 0 && _selOffset != 0) {
+			int selBegin = _selCaretPos;
+			int selEnd = _selCaretPos + _selOffset;
+			if (selBegin > selEnd) 
+				SWAP(selBegin, selEnd);
+			_editString.erase(selBegin, selEnd - selBegin);
+			setCaretPos(caretVisualPos(selBegin));
+			_selCaretPos = -1;
+			_selOffset = 0;
 			dirty = true;
 
 			sendCommand(_cmd, 0);
@@ -186,6 +301,12 @@ bool EditableWidget::handleKeyDown(Common::KeyState state) {
 		break;
 
 	case Common::KEYCODE_LEFT:
+		if(state.hasFlags(Common::KBD_SHIFT)) {
+			if(_selCaretPos < 0)
+				_selCaretPos = _caretPos;
+			if(_caretPos > 0)
+			_selOffset--;
+		}
 		// Move caret one left (if possible)
 		if (_caretPos > 0) {
 			dirty = setCaretPos(_caretPos - 1);
@@ -195,6 +316,12 @@ bool EditableWidget::handleKeyDown(Common::KeyState state) {
 		break;
 
 	case Common::KEYCODE_RIGHT:
+		if(state.hasFlags(Common::KBD_SHIFT)) {
+			if(_selCaretPos < 0)
+				_selCaretPos = _caretPos;
+			if(_selOffset + _selCaretPos < (int)_editString.size())
+			_selOffset++;
+		}
 		// Move caret one right (if possible)
 		if (_caretPos < (int)_editString.size()) {
 			dirty = setCaretPos(_caretPos + 1);
@@ -229,8 +356,15 @@ bool EditableWidget::handleKeyDown(Common::KeyState state) {
 
 	case Common::KEYCODE_c:
 		if (state.flags & Common::KBD_CTRL) {
-			if (!getEditString().empty())
-				g_system->setTextInClipboard(getEditString());
+			if (!getEditString().empty()) {
+				int selBegin = _selCaretPos;
+				int selEnd = _selCaretPos + _selOffset;
+				if (selBegin > selEnd)
+					SWAP(selBegin, selEnd);
+				const Common::U32String selected(getEditString().begin() + selBegin, getEditString().begin() + selEnd);
+				warning("Selected: %d %d %d %d %s", selBegin, selEnd, _selOffset, _selCaretPos, selected.encode().c_str());
+				g_system->setTextInClipboard(selected);
+			}
 		} else {
 			defaultKeyDownHandler(state, dirty, forcecaret, handled);
 		}
@@ -298,6 +432,12 @@ int EditableWidget::getCaretOffset() const {
 	return g_gui.getStringWidth(substr, _font) - _editScrollOffset;
 }
 
+int EditableWidget::getSelectionCarretOffset() const {
+	Common::UnicodeBiDiText utxt(_editString);
+	Common::U32String substr(utxt.visual.begin(), utxt.visual.begin() + _selCaretPos);
+	return g_gui.getStringWidth(substr, _font) - _editScrollOffset;
+}
+
 void EditableWidget::drawCaret(bool erase) {
 	// Only draw if item is visible
 	if (!isVisible() || !_boss->isVisible())
@@ -359,6 +499,10 @@ void EditableWidget::drawCaret(bool erase) {
 		// EditTextWidget uses that but not ListWidget. Thus, one should check
 		// whether we can unify the drawing in the text area first to avoid
 		// possible glitches due to different methods used.
+		if (_selOffset < 0) 
+			_inversion = ThemeEngine::kTextInversionFocus;
+		else 
+			_inversion = ThemeEngine::kTextInversionNone;
 		width = MIN(editRect.width() - caretOffset, width);
 		if (width > 0) {
 			g_gui.theme()->drawText(Common::Rect(x, y, x + width, y + editRect.height()), character,
@@ -408,6 +552,16 @@ void EditableWidget::makeCaretVisible() {
 	_caretTime = g_system->getMillis() + kCaretBlinkTime;
 	_caretVisible = true;
 	drawCaret(false);
+}
+
+void EditableWidget::clearSelection() {
+	_selCaretPos = -1;
+	_selOffset = 0;
+	markAsDirty();
+}
+
+void EditableWidget::setSelectionOffset(int newOffset) {
+	_selOffset = newOffset;
 }
 
 } // End of namespace GUI

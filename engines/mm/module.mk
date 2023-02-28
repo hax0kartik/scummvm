@@ -10,6 +10,9 @@ MODULE_OBJS := \
 	shared/utils/xeen_font.o \
 	shared/xeen/cc_archive.o \
 	shared/xeen/file.o \
+	shared/xeen/sound.o \
+	shared/xeen/sound_driver.o \
+	shared/xeen/sound_driver_adlib.o \
 	shared/xeen/sprites.o \
 	shared/xeen/xsurface.o
 
@@ -129,6 +132,7 @@ MODULE_OBJS += \
 	mm1/views_enh/game_commands.o \
 	mm1/views_enh/game_messages.o \
 	mm1/views_enh/game_party.o \
+	mm1/views_enh/game_view.o \
 	mm1/views_enh/main_menu.o \
 	mm1/views_enh/map.o \
 	mm1/views_enh/map_popup.o \
@@ -138,6 +142,8 @@ MODULE_OBJS += \
 	mm1/views_enh/scroll_text.o \
 	mm1/views_enh/scroll_view.o \
 	mm1/views_enh/text_view.o \
+	mm1/views_enh/interactions/interaction.o \
+	mm1/views_enh/interactions/statue.o \
 	mm1/views_enh/locations/location.o \
 	mm1/views_enh/locations/market.o \
 	mm1/views_enh/locations/temple.o \
@@ -254,9 +260,6 @@ MODULE_OBJS += \
 	xeen/saves.o \
 	xeen/screen.o \
 	xeen/scripts.o \
-	xeen/sound.o \
-	xeen/sound_driver.o \
-	xeen/sound_driver_adlib.o \
 	xeen/spells.o \
 	xeen/sprites.o \
 	xeen/subtitles.o \

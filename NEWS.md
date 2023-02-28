@@ -3,6 +3,12 @@ For a more comprehensive changelog of the latest experimental code, see:
 
 #### 2.8.0 (XXXX-XX-XX)
 
+ Asylum:
+   - Added support for Chinese Sanitarium.
+
+ Sherlock:
+   - Added support for Chinese Serrated Scalpel.
+
  Xeen:
    - Renamed 'xeen' engine to 'mm' for Might & Magic.
 
@@ -16,7 +22,7 @@ For a more comprehensive changelog of the latest experimental code, see:
    - Fixed bug with inability to pick up red envelope with keyboard.
 
 
-#### 2.7.0 (2023-02-26)
+#### 2.7.0 "The Real Slim Shader" (2023-02-26)
 
  New games:
    - Added support for Soldier Boyz.
@@ -208,7 +214,7 @@ For a more comprehensive changelog of the latest experimental code, see:
 
  iOS port:
    - Added pointer device support.
-   - Improved suppport for touchpad mode.
+   - Improved support for touchpad mode.
    - Added support for games that use 32 bit pixel formats.
 
  Nintendo DS port:

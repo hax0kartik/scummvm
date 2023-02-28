@@ -24,7 +24,7 @@
 
 #include "graphics/managed_surface.h"
 #include "mm/mm1/events.h"
-#include "mm/mm1/views/game_view.h"
+#include "mm/mm1/views_enh/game_view.h"
 #include "mm/mm1/views_enh/game_commands.h"
 #include "mm/mm1/views_enh/game_messages.h"
 #include "mm/mm1/views_enh/game_party.h"
@@ -36,7 +36,7 @@ namespace ViewsEnh {
 class Game : public Views::TextView {
 private:
 	Graphics::ManagedSurface _bg;
-	Views::GameView _view;
+	ViewsEnh::GameView _view;
 	GameCommands _commands;
 	GameParty _party;
 public:
@@ -51,7 +51,7 @@ public:
 	bool msgGame(const GameMessage &msg) override;
 };
 
-} // namespace Views
+} // namespace ViewsEnh
 } // namespace MM1
 } // namespace MM
 

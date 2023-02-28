@@ -149,7 +149,8 @@ void Te3DObject2::removeChild(Te3DObject2 *child) {
 		Common::String cname("nullptr");
 		if (child)
 			cname = child->name();
-		debug("Request to remove child (%s) which is not a child of this (%s).", cname.c_str(), name().c_str());
+		// This happens on every scene change so this is a bit too noisy.
+		// debug("Request to remove child (%s) which is not a child of this (%s).", cname.c_str(), name().c_str());
 	}
 }
 
@@ -214,6 +215,10 @@ void Te3DObject2::setPosition(const TeVector3f32 &pos) {
 	_position = pos;
 	_onPositionChangedSignal.call();
 	_onParentWorldTransformationMatrixChangedSignal.call();
+}
+
+void Te3DObject2::setPositionFast(const TeVector3f32 &pos) {
+	_position = pos;
 }
 
 void Te3DObject2::setRotation(const TeQuaternion &rot) {
@@ -323,7 +328,10 @@ bool Te3DObject2::loadAndCheckFourCC(Common::ReadStream &stream, const char *str
 	char buf[5];
 	buf[4] = '\0';
 	stream.read(buf, 4);
-	return !strncmp(buf, str, 4);
+	bool result = !strncmp(buf, str, 4);
+	if (!result)
+		debug("loadAndCheckFourCC: Look for %s, got %s", str, buf);
+	return result;
 }
 
 /*static*/

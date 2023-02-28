@@ -112,6 +112,7 @@ bool InGameScene::addMarker(const Common::String &markerName, const Common::Stri
 	const TeMarker *marker = findMarker(markerName);
 	if (!marker) {
 		Game *game = g_engine->getGame();
+		Application *app = g_engine->getApplication();
 		TeSpriteLayout *markerSprite = new TeSpriteLayout();
 		// Note: game checks paths here but seems to just use the original?
 		markerSprite->setName(markerName);
@@ -121,21 +122,36 @@ bool InGameScene::addMarker(const Common::String &markerName, const Common::Stri
 		markerSprite->setPositionType(TeILayout::RELATIVE_TO_PARENT);
 		TeVector3f32 newPos;
 		if (locType == "PERCENT") {
-			Application *app = g_engine->getApplication();
-			TeVector3f32 frontLayoutSize = app->frontLayout().userSize();
-			newPos.x() = frontLayoutSize.x() * (x / 100.0);
-			newPos.y() = frontLayoutSize.y() * (y / 100.0);
+			TeVector3f32 parentSize;
+			//if (g_engine->gameType() == TetraedgeEngine::kSyberia)
+				parentSize = app->frontLayout().userSize();
+			//else
+			//	parentSize = app->getMainWindow().size();
+			newPos.x() = parentSize.x() * (x / 100.0f);
+			newPos.y() = parentSize.y() * (y / 100.0f);
 		} else {
 			newPos.x() = x / g_engine->getDefaultScreenWidth();
 			newPos.y() = y / g_engine->getDefaultScreenHeight();
 		}
 		markerSprite->setPosition(newPos);
 
-		const TeVector3f32 winSize = g_engine->getApplication()->getMainWindow().size();
+		const TeVector3f32 winSize = app->getMainWindow().size();
+		float xscale = 1.0f;
+		float yscale = 1.0f;
+		if (g_engine->gameType() == TetraedgeEngine::kSyberia2) {
+			TeLayout *bglayout = _bgGui.layoutChecked("background");
+			TeSpriteLayout *rootlayout = Game::findSpriteLayoutByName(bglayout, "root");
+			if (rootlayout) {
+				TeVector2s32 bgSize = rootlayout->_tiledSurfacePtr->tiledTexture()->totalSize();
+				xscale = 800.0f / bgSize._x;
+				yscale = 600.0f / bgSize._y;
+			}
+		}
+
 		if (g_engine->getCore()->fileFlagSystemFlag("definition") == "SD") {
-			markerSprite->setSize(TeVector3f32(0.07f, (4.0f / ((winSize.y() / winSize.x()) * 4.0f)) * 0.07f, 0.0));
+			markerSprite->setSize(TeVector3f32(xscale * 0.07f, yscale * (4.0f / ((winSize.y() / winSize.x()) * 4.0f)) * 0.07f, 0.0));
 		} else {
-			markerSprite->setSize(TeVector3f32(0.04f, (4.0f / ((winSize.y() / winSize.x()) * 4.0f)) * 0.04f, 0.0));
+			markerSprite->setSize(TeVector3f32(xscale * 0.04f, yscale * (4.0f / ((winSize.y() / winSize.x()) * 4.0f)) * 0.04f, 0.0));
 		}
 		markerSprite->setVisible(game->markersVisible());
 		markerSprite->_tiledSurfacePtr->_frameAnim.setLoopCount(-1);
@@ -424,7 +440,7 @@ void InGameScene::drawMask() {
 	if (!_maskAlpha)
 		rend->colorMask(false, false, false, false);
 
-	for (auto mask : _masks)
+	for (auto &mask : _masks)
 		mask->draw();
 
 	if (!_maskAlpha)
@@ -553,6 +569,9 @@ void InGameScene::freeSceneObjects() {
 	_sprites.clear();
 
 	// TODO: Clean up snows, waterCones, smokes, snowCones
+
+	_particles.clear();
+	TeParticle::deleteAll();
 
 	deleteAllCallback();
 	_markers.clear();
@@ -821,6 +840,15 @@ bool InGameScene::loadXml(const Common::String &zone, const Common::String &scen
 			error("InGameScene::loadXml: Can't parse %s", pnode.getPath().c_str());
 	}
 
+
+	TeMatrix4x4 camMatrix = currentCamera() ?
+		currentCamera()->worldTransformationMatrix() : TeMatrix4x4();
+	for (auto &particle : _particles) {
+		particle->setMatrix(camMatrix);
+		particle->realTimer().start();
+		particle->update(particle->startLoop());
+	}
+
 	return true;
 }
 
@@ -983,16 +1011,31 @@ bool InGameScene::loadPlayerCharacter(const Common::String &name) {
 
 		_playerCharacterModel = _character->_model;
 
-		if (!findKate()) {
-			models().push_back(_character->_model);
-			if (_character->_shadowModel[0]) {
-				models().push_back(_character->_shadowModel[0]);
-				models().push_back(_character->_shadowModel[1]);
+		bool kateFound = findKate();
+
+		if (g_engine->gameType() == TetraedgeEngine::kSyberia) {
+			if (!kateFound) {
+				models().push_back(_character->_model);
+				if (_character->_shadowModel[0]) {
+					models().push_back(_character->_shadowModel[0]);
+					models().push_back(_character->_shadowModel[1]);
+				}
 			}
+		} else {
+			if (kateFound) {
+				for (uint i = 0; i < models().size(); i++) {
+					if (models()[i] == _character->_model) {
+						models().remove_at(i);
+						break;
+					}
+				}
+			}
+			models().push_back(_character->_model);
 		}
 	}
 
 	_character->_model->setVisible(true);
+	_character->setFreeMoveZone(nullptr);
 	return true;
 }
 
@@ -1527,7 +1570,7 @@ void InGameScene::unloadCharacter(const Common::String &name) {
 		if (_character->_model->anim())
 			_character->_model->anim()->stop(); // TODO: added this
 		_character->setFreeMoveZone(nullptr); // TODO: added this
-		// TODO: deleteLater() something here..
+		_character->deleteLater();
 		_character = nullptr;
 	}
 	for (uint i = 0; i < _characters.size(); i++) {
@@ -1536,7 +1579,7 @@ void InGameScene::unloadCharacter(const Common::String &name) {
 			c->removeAnim();
 			c->deleteAnim();
 			c->deleteAllCallback();
-			// TODO: deleteLater() something here..
+			c->deleteLater();
 			if (c->_model->anim())
 				c->_model->anim()->stop(); // TODO: added this
 			c->setFreeMoveZone(nullptr); // TODO: added this
@@ -1763,7 +1806,7 @@ void InGameScene::updateViewport(int ival) {
 							_scrollOffset.getY() * _scrollScale.getY());
 	const TeVector3f32 winSize = g_engine->getApplication()->getMainWindow().size();
 	float aspectRatio = lsize.getX() / lsize.getY();
-	for (auto cam : cameras()) {
+	for (auto &cam : cameras()) {
 		//cam->setSomething(ival);
 		int x = (winSize.x() - lsize.getX()) / 2.0f + offset.getX();
 		int y = (winSize.y() - lsize.getY()) / 2.0f;
@@ -1776,7 +1819,7 @@ void InGameScene::updateViewport(int ival) {
 }
 
 void InGameScene::activateMask(const Common::String &name, bool val) {
-	for (auto mask : _masks) {
+	for (auto &mask : _masks) {
 		if (mask->name() == name) {
 			mask->setVisible(val);
 			return;

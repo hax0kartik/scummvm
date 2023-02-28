@@ -138,7 +138,7 @@ TeTRS TeModel::getBone(TeIntrusivePtr<TeModelAnimation> anim, uint num) {
 }
 
 void TeModel::invertNormals() {
-	for (auto mesh : meshes()) {
+	for (auto &mesh : meshes()) {
 		for (uint i = 0; i < mesh->numIndexes() / 3; i++) {
 			// Swap order of verticies in each triangle.
 			uint idx0 = mesh->index(i);
@@ -186,8 +186,7 @@ void TeModel::update() {
 	//if (name().contains("Kate"))
 	//	debug("TeModel::update model %s", name().c_str());
 	if (_bones.size()) {
-		Common::Array<TeMatrix4x4> matricies;
-		matricies.resize(_bones.size());
+		Common::Array<TeMatrix4x4> matricies(_bones.size());
 		for (uint i = 0; i < _bones.size(); i++) {
 			const Bone &b = _bones[i];
 			const TeMatrix4x4 matrix = TeMatrix4x4::fromTRS(b._trs);
@@ -397,7 +396,7 @@ bool TeModel::load(Common::SeekableReadStream &stream) {
 		loadAlign(stream);
 		_bones[i]._parentBone = stream.readUint32LE();
 		TeTRS::deserialize(stream, _bones[i]._trs);
-		if (!_skipSkinOffsets) {
+		if (!_skipSkinOffsets || g_engine->gameType() == TetraedgeEngine::kSyberia2) {
 			_skinOffsets[i].deserialize(stream);
 		}
 	}
@@ -570,6 +569,7 @@ bool TeModel::loadMesh(Common::SeekableReadStream &stream, TeMesh &mesh) {
 }
 
 void TeModel::setQuad(const TeIntrusivePtr<Te3DTexture> &tex, const Common::Array<TeVector3f32> &verts, const TeColor &col) {
+	_meshes.clear();
 	Common::SharedPtr<TeMesh> mesh(TeMesh::makeInstance());
 	mesh->setConf(4, 4, TeMesh::MeshMode_TriangleStrip, 0, 0);
 	mesh->defaultMaterial(tex);
